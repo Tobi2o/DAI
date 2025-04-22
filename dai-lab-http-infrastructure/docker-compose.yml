@@ -1,0 +1,48 @@
+version: '3.8'
+services:
+  traefik:
+    image: traefik:v2.10
+    command: --api.insecure=true --providers.docker
+    ports:
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./certificates:/etc/traefik/certificates
+      - ./traefik.yaml:/etc/traefik/traefik.yaml
+
+  todo-api:
+    image: server-todo-api:latest
+    build:
+      context: ./javalin-application
+    labels:
+      - "traefik.http.routers.todo-api.rule=Host(`localhost`) && PathPrefix(`/api`)"
+      - "traefik.http.services.todo-api.loadbalancer.sticky=true"
+      - "traefik.http.services.todo-api.loadbalancer.sticky.cookie.name=StickyCookie"
+      - "traefik.http.services.todo-api.loadbalancer.sticky.cookie.secure=true"
+      - "traefik.http.routers.todo-api.tls=true"
+      - "traefik.http.routers.todo-api.entrypoints=websecure"
+      - "traefik.http.services.todo-api.loadbalancer.server.port=7000"
+    deploy:
+      replicas: 1
+
+  webapp:
+    image: nginx-custom:latest
+    build:
+      context: ./web-application
+    volumes:
+      - ./web-application/dai-static-web-server:/usr/share/nginx/html
+    labels:
+      - "traefik.http.routers.froom-static.rule=Host(`localhost`)"
+      - "traefik.http.routers.froom-static.tls=true"
+      - "traefik.http.routers.froom-static.entrypoints=websecure"
+    deploy:
+      replicas: 1
+   # Portainer service configuration
+  portainer:
+    image: portainer/portainer-ce:latest 
+    ports:
+      - "9443:9443" 
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock 
+    restart: unless-stopped 
